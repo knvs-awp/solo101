@@ -5,3 +5,5 @@
 ## [QuickStartup](onboarding.md)
 
 ## [Tech-stack](tech-stack.md)
+
+## [Deployment](deployment.md)
