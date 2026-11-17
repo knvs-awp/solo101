@@ -5,16 +5,18 @@ name: project checks
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
-# the workflow needs to read the repository, so its token receives no write permissions
+# jobs default to reading the repository
+# deployment separately requests OIDC
 permissions:
   contents: read
 
-# a newer run for the same branch or pull request replaces an older unfinished run,
-# which avoids spending time checking code that has already been superseded
+# production runs finish publishing
+# other branches replace superseded checks
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   checks:
@@ -48,3 +50,75 @@ jobs:
 
       - name: build workspaces
         run: npm run build
+
+      - name: save frontend build for deployment
+        if: ${{ github.repository_id == '1453313892' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 3
+
+  deploy-frontend:
+    name: deploy frontend
+    needs: checks
+    if: ${{ github.repository_id == '1453313892' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-2
+      FRONTEND_BUCKET: solo101-frontend-knvs-awp-391742238993-us-east-2-an
+      CLOUDFRONT_DISTRIBUTION_ID: E1X521FL3327X8
+      FRONTEND_URL: https://d3w0xbq9l7a6rf.cloudfront.net
+
+    steps:
+      - name: download the checked frontend build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frontend-dist
+          path: frontend-dist
+
+      # only this job requests temporary AWS credentials
+      # the trust policy restricts the role to this repository's main branch
+      - name: authenticate to AWS using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::391742238993:role/solo101-frontend-deploy-role
+          allowed-account-ids: '391742238993'
+          role-session-name: frontend-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: upload assets before publishing the homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s frontend-dist/index.html
+          aws s3 sync frontend-dist/ "s3://$FRONTEND_BUCKET/" \
+            --exclude "index.html" \
+            --cache-control "public,max-age=300" \
+            --only-show-errors
+          # retain previous assets so already-open pages can still load them
+          aws s3 cp frontend-dist/index.html "s3://$FRONTEND_BUCKET/index.html" \
+            --content-type "text/html" \
+            --cache-control "no-cache" \
+            --only-show-errors
+
+      - name: refresh CloudFront and verify the published homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+          invalidation_id=$(aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths "/*" --query 'Invalidation.Id' --output text)
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --id "$invalidation_id"
+          curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 30 --retry 3 --retry-delay 5 \
+            "$FRONTEND_URL/index.html" --output "$RUNNER_TEMP/deployed-index.html"
+          cmp frontend-dist/index.html "$RUNNER_TEMP/deployed-index.html"
