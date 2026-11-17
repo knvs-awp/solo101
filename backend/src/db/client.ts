@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { drizzle } from 'drizzle-orm/mysql2';
-import { createPool } from 'mysql2/promise';
+import { createPool, type ConnectionOptions } from 'mysql2/promise';
 import * as schema from './schema.js';
 
 export function require_database_url(value: string | undefined): string {
@@ -21,19 +22,42 @@ export function require_database_url(value: string | undefined): string {
   return value;
 }
 
+// production uses the RDS certificate bundle to verify the database server
+export function database_connection_options(
+  database_url = process.env['DATABASE_URL'],
+  env: NodeJS.ProcessEnv = process.env,
+): ConnectionOptions {
+  const uri = require_database_url(database_url);
+  const ca_file = env['DATABASE_SSL_CA_FILE'];
+  if (env['NODE_ENV'] === 'production' && !ca_file) {
+    throw new Error('DATABASE_SSL_CA_FILE is required in production');
+  }
+
+  return {
+    uri,
+    timezone: 'Z',
+    charset: 'utf8mb4',
+    ...(ca_file ? {
+      ssl: {
+        ca: readFileSync(ca_file, 'utf8'),
+        rejectUnauthorized: true,
+        verifyIdentity: true,
+      },
+    } : {}),
+  };
+}
+
 // each backend process shares one pool, and pool.end() releases its connections
 // connections open on demand, so /health does not depend on mysql
 export function create_database(database_url = process.env['DATABASE_URL']) {
   const pool = createPool({
-    uri: require_database_url(database_url),
+    ...database_connection_options(database_url),
     connectionLimit: 5,
     connectTimeout: 5000,
     maxIdle: 5,
     idleTimeout: 30000,
     waitForConnections: true,
     queueLimit: 20,
-    timezone: 'Z',
-    charset: 'utf8mb4',
   });
 
   return { db: drizzle(pool, { schema, mode: 'default' }), pool };
