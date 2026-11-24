@@ -6,6 +6,8 @@
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "start": "node --env-file-if-exists=.env dist/server.js",
+    "start:production": "node dist/start-production.js",
+    "test:production-config": "node --import tsx --test tests/production-config.test.ts",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "node --env-file-if-exists=.env --import tsx src/db/migrate.ts"
   },

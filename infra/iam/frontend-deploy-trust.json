@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowMainBranchDeployment",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::391742238993:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:knvs-awp@345533467/solo101@1453313892:ref:refs/heads/main"
+        }
+      }
+    }
+  ]
+}
