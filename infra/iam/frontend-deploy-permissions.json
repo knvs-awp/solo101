@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListFrontendBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::solo101-frontend-knvs-awp-391742238993-us-east-2-an"
+    },
+    {
+      "Sid": "UploadFrontendFiles",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:AbortMultipartUpload"
+      ],
+      "Resource": "arn:aws:s3:::solo101-frontend-knvs-awp-391742238993-us-east-2-an/*"
+    },
+    {
+      "Sid": "RefreshFrontendCache",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateInvalidation",
+        "cloudfront:GetInvalidation"
+      ],
+      "Resource": "arn:aws:cloudfront::391742238993:distribution/E1X521FL3327X8"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+[Unit]
+Description=Solo101 Express backend
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=solo101
+Group=solo101
+WorkingDirectory=/opt/solo101/current/backend
+EnvironmentFile=/etc/solo101/backend.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node /opt/solo101/current/backend/dist/start-production.js
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
